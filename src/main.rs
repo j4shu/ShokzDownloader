@@ -166,7 +166,7 @@ fn copy_with_progress(src: &Path, dest: &Path) -> Result<u64, std::io::Error> {
 
 fn main() -> Result<()> {
     // Select target device to transfer to
-    let target = select_folder(Path::new("/Volumes"), "Shokz OpenSwim device")?;
+    let target = select_folder(Path::new("/Volumes"), "Shokz device")?;
     println!("Selected device: {}\n", target.display());
 
     // Select folder to transfer from
