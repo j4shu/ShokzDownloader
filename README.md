@@ -26,6 +26,6 @@ The program guides you through three steps:
 2. **Select folder** - Select a folder from your Desktop containing your music files.
 3. **Confirm** - Review the file list and confirm the transfer.
 
-### Assumptions
+## Assumptions
 
 The program assumes that the music files start with a track number prefix. This is to ensure the order they are transferred to the device is deterministic. For example, `1 - Song Name.mp3`, `2 - Song Name.mp3`, etc.
