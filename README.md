@@ -1,3 +1,5 @@
+https://github.com/user-attachments/assets/f0fb84b7-7c46-4379-ab5d-da61ab13f7af
+
 # ShokzDownloader
 
 A simple command-line tool for transferring music files to a Shokz device (i.e. the [Shokz OpenSwim](https://shokz.com/products/openswim)).
