@@ -22,7 +22,7 @@ cargo run
 
 The program guides you through three steps:
 
-1. **Select device** - Select your Shokz device from mounted volumes under `/Volumes/`.
+1. **Select device** - Select your mounted Shokz device under `/Volumes/`.
 2. **Select folder** - Select a folder from your Desktop containing your music files.
 3. **Confirm** - Review the file list and confirm the transfer.
 
