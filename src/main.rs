@@ -1,9 +1,7 @@
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use dialoguer::Select;
-use indicatif::{ProgressBar, ProgressStyle};
 
 // --- Selection ---
 
@@ -67,14 +65,6 @@ fn collect_music_files(dir: &Path) -> Result<Vec<PathBuf>> {
 const DELAY_MS: u64 = 100;
 
 fn transfer_files(files: &[PathBuf], source_root: &Path, target_root: &Path) -> Result<()> {
-    let total = files.len() as u64;
-    let overall_pb = ProgressBar::new(total);
-    overall_pb.set_style(
-        ProgressStyle::default_bar()
-            .template("[{pos}/{len}] {msg}")?
-            .progress_chars("##-"),
-    );
-
     let mut total_bytes: u64 = 0;
     let mut failures: usize = 0;
 
@@ -90,29 +80,23 @@ fn transfer_files(files: &[PathBuf], source_root: &Path, target_root: &Path) -> 
             .to_string_lossy()
             .to_string();
 
-        overall_pb.set_message(format!("Copying: {file_name}"));
+        println!("[{}/{}] Copying: {file_name}", i + 1, files.len());
 
-        match copy_with_progress(file, &dest) {
+        match std::fs::copy(file, &dest) {
             Ok(bytes) => {
                 total_bytes += bytes;
             }
             Err(e) => {
-                overall_pb.suspend(|| {
-                    eprintln!("  Failed to copy {}: {e}", file.display());
-                });
+                eprintln!("  Failed to copy {}: {e}", file.display());
                 failures += 1;
             }
         }
-
-        overall_pb.inc(1);
 
         // Delay between files to ensure distinct timestamps on the target device
         if i < files.len() - 1 {
             std::thread::sleep(std::time::Duration::from_millis(DELAY_MS));
         }
     }
-
-    overall_pb.finish_and_clear();
 
     let total_mb = total_bytes as f64 / (1024.0 * 1024.0);
     println!(
@@ -127,39 +111,6 @@ fn transfer_files(files: &[PathBuf], source_root: &Path, target_root: &Path) -> 
     }
 
     Ok(())
-}
-
-fn copy_with_progress(src: &Path, dest: &Path) -> Result<u64, std::io::Error> {
-    let metadata = std::fs::metadata(src)?;
-    let file_size = metadata.len();
-
-    let file_pb = ProgressBar::new(file_size);
-    file_pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{bar:40.cyan/blue} {bytes}/{total_bytes} ({eta})")
-            .unwrap()
-            .progress_chars("##-"),
-    );
-
-    let mut reader = std::io::BufReader::new(std::fs::File::open(src)?);
-    let mut writer = std::io::BufWriter::new(std::fs::File::create(dest)?);
-    let mut buffer = [0u8; 65536];
-    let mut copied: u64 = 0;
-
-    loop {
-        let bytes_read = reader.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        writer.write_all(&buffer[..bytes_read])?;
-        copied += bytes_read as u64;
-        file_pb.set_position(copied);
-    }
-
-    writer.flush()?;
-    file_pb.finish_and_clear();
-
-    Ok(copied)
 }
 
 // --- Main ---
