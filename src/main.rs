@@ -116,7 +116,7 @@ fn transfer_files(files: &[PathBuf], source_root: &Path, target_root: &Path) -> 
 
     let total_mb = total_bytes as f64 / (1024.0 * 1024.0);
     println!(
-        "Done! Transferred {} file(s) ({:.1} MB) to {}",
+        "Done! Transferred {} file(s) ({:.1} MB) to {}.",
         files.len() - failures,
         total_mb,
         target_root.display()
@@ -170,17 +170,17 @@ fn main() -> Result<()> {
     println!("Selected device: {}\n", target.display());
 
     // Select folder to transfer from
-    let desktop = dirs::desktop_dir().context("Could not find Desktop directory")?;
+    let desktop = dirs::desktop_dir().context("Could not find Desktop directory.")?;
     let source = select_folder(&desktop, "album")?;
     println!("Selected album: {}\n", source.display());
 
     // Collect music files from the selected folder
     let files = collect_music_files(&source)?;
     if files.is_empty() {
-        println!("No music files found in '{}'", source.display());
+        println!("No music files found in '{}'.", source.display());
         return Ok(());
     }
-    println!("Found {} music file(s) to transfer:\n", files.len());
+    println!("Found {} music file(s) to transfer.\n", files.len());
 
     // List the files to be transferred
     for f in &files {
