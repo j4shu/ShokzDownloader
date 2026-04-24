@@ -28,4 +28,5 @@ The program guides you through three steps:
 
 ## Assumptions
 
-The program assumes that the music files start with a track number prefix. This is to ensure the order they are transferred to the device is deterministic. For example, `1 - Song Name.mp3`, `2 - Song Name.mp3`, etc.
+- Music files should start with a track number prefix. This is to ensure the order they are transferred to the device is deterministic. For example, `1 - Song Name.mp3`, `2 - Song Name.mp3`, etc.
+- The selected folder should not contain any subfolders. Non-music files will be silently skipped during the transfer process.
