@@ -1,27 +1,15 @@
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use clap::Parser;
+use anyhow::{Context, Result, bail};
+use dialoguer::Select;
 use indicatif::{ProgressBar, ProgressStyle};
-
-// --- CLI ---
-
-#[derive(Parser)]
-#[command(
-    name = "shokz-downloader",
-    about = "Transfer music to Shokz OpenSwim headphones"
-)]
-struct Cli {
-    /// Show what would be transferred without copying
-    #[arg(long)]
-    dry_run: bool,
-}
 
 // --- Selection ---
 
-fn select_folder(dir: &Path, label: &str) -> Result<PathBuf, String> {
+fn select_folder(dir: &Path, label: &str) -> Result<PathBuf> {
     let entries =
-        std::fs::read_dir(dir).map_err(|e| format!("Cannot read {}: {e}", dir.display()))?;
+        std::fs::read_dir(dir).with_context(|| format!("Cannot read {}", dir.display()))?;
 
     let mut folders: Vec<PathBuf> = entries
         .flatten()
@@ -31,49 +19,36 @@ fn select_folder(dir: &Path, label: &str) -> Result<PathBuf, String> {
     folders.sort();
 
     if folders.is_empty() {
-        return Err(format!("No folders found in {}.", dir.display()));
+        bail!("No folders found in {}.", dir.display());
     }
 
-    println!("{label}:");
-    for (i, folder) in folders.iter().enumerate() {
-        println!("  {}. {}", i + 1, folder.display());
-    }
+    let names: Vec<String> = folders.iter().map(|f| f.display().to_string()).collect();
 
-    print!("\nSelect your {label} (1-{}): ", folders.len());
-    std::io::stdout().flush().map_err(|e| e.to_string())?;
+    let selection = Select::new()
+        .with_prompt(format!("Select {label}"))
+        .items(&names)
+        .default(0)
+        .interact()
+        .context("Selection failed")?;
 
-    let mut input = String::new();
-    std::io::stdin()
-        .read_line(&mut input)
-        .map_err(|e| format!("Failed to read input: {e}"))?;
-
-    let choice: usize = input
-        .trim()
-        .parse()
-        .map_err(|_| "Invalid selection.".to_string())?;
-
-    if choice < 1 || choice > folders.len() {
-        return Err(format!("Selection out of range (1-{}).", folders.len()));
-    }
-
-    Ok(folders[choice - 1].clone())
+    Ok(folders[selection].clone())
 }
 
 // --- File Discovery ---
 
 const MUSIC_EXTENSIONS: &[&str] = &["mp3", "m4a", "flac", "wav", "ogg", "wma", "aac"];
 
-fn collect_music_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
+fn collect_music_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
-    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            return Err(format!(
+            bail!(
                 "Album folder contains a subdirectory: '{}'. Only flat folders are supported.",
                 path.file_name().unwrap_or_default().to_string_lossy()
-            ));
+            );
         } else if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if MUSIC_EXTENSIONS.contains(&ext.to_lowercase().as_str()) {
@@ -91,11 +66,7 @@ fn collect_music_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
 
 const DELAY_MS: u64 = 100;
 
-fn transfer_files(
-    files: &[PathBuf],
-    source_root: &Path,
-    target_root: &Path,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn transfer_files(files: &[PathBuf], source_root: &Path, target_root: &Path) -> Result<()> {
     let total = files.len() as u64;
     let overall_pb = ProgressBar::new(total);
     overall_pb.set_style(
@@ -165,7 +136,7 @@ fn copy_with_progress(src: &Path, dest: &Path) -> Result<u64, std::io::Error> {
     let file_pb = ProgressBar::new(file_size);
     file_pb.set_style(
         ProgressStyle::default_bar()
-            .template("  {bar:40.cyan/blue} {bytes}/{total_bytes} ({eta})")
+            .template("{bar:40.cyan/blue} {bytes}/{total_bytes} ({eta})")
             .unwrap()
             .progress_chars("##-"),
     );
@@ -193,61 +164,43 @@ fn copy_with_progress(src: &Path, dest: &Path) -> Result<u64, std::io::Error> {
 
 // --- Main ---
 
-fn main() {
-    let cli = Cli::parse();
+fn main() -> Result<()> {
+    // Select target device to transfer to
+    let target = select_folder(Path::new("/Volumes"), "Shokz OpenSwim device")?;
+    println!("Selected device: {}\n", target.display());
 
-    let target = match select_folder(Path::new("/Volumes"), "Shokz OpenSwim device") {
-        Ok(path) => {
-            println!("Selected device: {}\n", path.display());
-            path
-        }
-        Err(msg) => {
-            eprintln!("Error: {msg}");
-            std::process::exit(1);
-        }
-    };
+    // Select folder to transfer from
+    let desktop = dirs::desktop_dir().context("Could not find Desktop directory")?;
+    let source = select_folder(&desktop, "album")?;
+    println!("Selected album: {}\n", source.display());
 
-    let home = std::env::var("HOME").unwrap_or_else(|_| {
-        eprintln!("Error: HOME not set");
-        std::process::exit(1);
-    });
-    let desktop = PathBuf::from(home).join("Desktop");
-
-    let source = match select_folder(&desktop, "album") {
-        Ok(path) => {
-            println!("Selected album: {}\n", path.display());
-            path
-        }
-        Err(msg) => {
-            eprintln!("Error: {msg}");
-            std::process::exit(1);
-        }
-    };
-
-    let files = match collect_music_files(&source) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("Error scanning source directory: {e}");
-            std::process::exit(1);
-        }
-    };
-
+    // Collect music files from the selected folder
+    let files = collect_music_files(&source)?;
     if files.is_empty() {
         println!("No music files found in '{}'", source.display());
-        return;
+        return Ok(());
     }
-
     println!("Found {} music file(s) to transfer:\n", files.len());
 
-    if cli.dry_run {
-        for f in &files {
-            println!("  {}", f.file_name().unwrap_or_default().to_string_lossy());
-        }
-        return;
+    // List the files to be transferred
+    for f in &files {
+        println!("  {}", f.file_name().unwrap_or_default().to_string_lossy());
+    }
+    println!();
+
+    // Confirm or cancel transfer
+    let choice = Select::new()
+        .with_prompt("Proceed with transfer?")
+        .items(&["No", "Yes"])
+        .default(0)
+        .interact()
+        .context("Selection failed")?;
+    if choice == 0 {
+        println!("Transfer cancelled.");
+        return Ok(());
     }
 
-    if let Err(e) = transfer_files(&files, &source, &target) {
-        eprintln!("\nTransfer failed: {e}");
-        std::process::exit(1);
-    }
+    // Start the transfer process
+    transfer_files(&files, &source, &target)?;
+    Ok(())
 }
