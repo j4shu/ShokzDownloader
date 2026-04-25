@@ -2,8 +2,34 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 use dialoguer::Select;
+use sysinfo::Disks;
 
-// --- Selection ---
+// Selection helpers
+fn select_device() -> Result<PathBuf> {
+    let disks = Disks::new_with_refreshed_list();
+    let mut removable: Vec<PathBuf> = disks
+        .list()
+        .iter()
+        .filter(|d| d.is_removable())
+        .map(|d| d.mount_point().to_path_buf())
+        .collect();
+    removable.sort();
+
+    if removable.is_empty() {
+        bail!("No removable devices found. Please connect your Shokz device and try again.");
+    }
+
+    let names: Vec<String> = removable.iter().map(|p| p.display().to_string()).collect();
+
+    let selection = Select::new()
+        .with_prompt("Select Shokz device")
+        .items(&names)
+        .default(0)
+        .interact()
+        .context("Selection failed")?;
+
+    Ok(removable[selection].clone())
+}
 
 fn select_folder(dir: &Path, label: &str) -> Result<PathBuf> {
     let entries =
@@ -32,10 +58,8 @@ fn select_folder(dir: &Path, label: &str) -> Result<PathBuf> {
     Ok(folders[selection].clone())
 }
 
-// --- File Discovery ---
-
+// File helpers
 const MUSIC_EXTENSIONS: &[&str] = &["mp3", "m4a", "flac", "wav", "ogg", "wma", "aac"];
-
 fn collect_music_files(dir: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
 
@@ -60,10 +84,8 @@ fn collect_music_files(dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-// --- Copy Engine ---
-
+// Copy helpers
 const DELAY_MS: u64 = 100;
-
 fn transfer_files(files: &[PathBuf], source_root: &Path, target_root: &Path) -> Result<()> {
     let mut total_bytes: u64 = 0;
     let mut failures: usize = 0;
@@ -113,11 +135,9 @@ fn transfer_files(files: &[PathBuf], source_root: &Path, target_root: &Path) -> 
     Ok(())
 }
 
-// --- Main ---
-
 fn main() -> Result<()> {
     // Select target device to transfer to
-    let target = select_folder(Path::new("/Volumes"), "Shokz device")?;
+    let target = select_device()?;
     println!("Selected device: {}\n", target.display());
 
     // Select folder to transfer from
